@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Drone CLI Command Sender
+Interactive Drone CLI Command Sender
 Sends commands to the drone controller via socket connection.
-Usage: python drone_cli.py [command] [arguments]
+Usage: python3 drone_cli.py
 """
 
 import socket
 import sys
 import json
-import argparse
 import time
 
 class DroneCommandSender:
@@ -16,140 +15,233 @@ class DroneCommandSender:
         self.host = host
         self.port = port
         self.socket = None
+        self.connected = False
     
     def connect(self):
         """Establish connection to drone controller"""
         try:
+            if self.socket:
+                self.socket.close()
+            
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(10)  # 10 second timeout
+            self.socket.settimeout(180)  # 3 minute timeout for long operations
             self.socket.connect((self.host, self.port))
             print(f"✓ Connected to drone controller at {self.host}:{self.port}")
+            self.connected = True
             return True
         except Exception as e:
             print(f"✗ Failed to connect to drone controller: {e}")
+            self.connected = False
             return False
     
     def send_command(self, command_data):
         """Send command to drone controller"""
         try:
-            if not self.socket:
+            if not self.connected:
                 if not self.connect():
                     return False
+            
+            # Show different messages for different commands
+            action = command_data.get('action', 'unknown')
+            if action == 'goto':
+                print("⏳ Executing goto command... (this may take up to 2 minutes)")
+            elif action == 'takeoff':
+                print("⏳ Executing takeoff... (this may take up to 1 minute)")
             
             # Send command as JSON
             message = json.dumps(command_data) + '\n'
             self.socket.send(message.encode('utf-8'))
             
-            # Wait for response
-            response = self.socket.recv(1024).decode('utf-8').strip()
+            # Wait for response with longer timeout for complex operations
+            response = self.socket.recv(8192).decode('utf-8').strip()
             response_data = json.loads(response)
             
             if response_data.get('status') == 'success':
-                print(f"✓ Command executed: {response_data.get('message', 'Success')}")
+                message = response_data.get('message', 'Success')
+                print(f"✓ {message}")
+                
+                # Print additional data if available
+                if 'data' in response_data:
+                    self._print_status_data(response_data['data'])
                 return True
             else:
                 print(f"✗ Command failed: {response_data.get('message', 'Unknown error')}")
                 return False
                 
+        except socket.timeout:
+            print(f"✗ Command timed out - this usually means the drone is still executing the command")
+            print("  You can check status or try reconnecting")
+            self.connected = False
+            return False
         except Exception as e:
             print(f"✗ Error sending command: {e}")
+            self.connected = False
             return False
+    
+    def _print_status_data(self, data):
+        """Pretty print status data"""
+        print("--- Drone Status ---")
+        print(f"Connected: {'Yes' if data.get('connected') else 'No'}")
+        print(f"Armed: {'Yes' if data.get('armed') else 'No'}")
+        print(f"Altitude: {data.get('altitude', 0.0):.2f}m")
+        print(f"Flight Mode: {data.get('flight_mode', 'Unknown')}")
+        
+        position = data.get('position')
+        if position:
+            print(f"Position: Lat={position.get('lat', 0.0):.6f}°, Lon={position.get('lon', 0.0):.6f}°, Alt={position.get('alt', 0.0):.2f}m")
+        
+        print(f"Takeoff Position Set: {'Yes' if data.get('takeoff_position_set') else 'No'}")
+        
+        battery = data.get('battery')
+        if battery:
+            print(f"Battery: {battery.get('remaining', 0)}% ({battery.get('voltage', 0.0):.1f}V)")
+        
+        gps = data.get('gps')
+        if gps:
+            print(f"GPS: {gps.get('satellites', 0)} satellites, {gps.get('fix_type', 'Unknown')} fix")
+        
+        print("-------------------")
     
     def close(self):
         """Close socket connection"""
         if self.socket:
             self.socket.close()
             self.socket = None
+        self.connected = False
+
+def print_help():
+    """Print available commands"""
+    print("\n=== Available Commands ===")
+    print("arm                    - Arm the drone")
+    print("disarm                 - Disarm the drone")
+    print("takeoff <altitude>     - Takeoff to specified altitude (meters)")
+    print("land                   - Land the drone")
+    print("move <distance>        - Move forward by distance (meters)")
+    print("goto <x> <y> <z>       - Go to specific position (x,y,z in meters)")
+    print("status                 - Get drone status")
+    print("help                   - Show this help message")
+    print("exit/quit              - Exit the program")
+    print("==========================\n")
+
+def parse_command(command_line):
+    """Parse command line input"""
+    parts = command_line.strip().split()
+    if not parts:
+        return None
+    
+    command = parts[0].lower()
+    args = parts[1:]
+    
+    if command in ['exit', 'quit']:
+        return {'action': 'exit'}
+    
+    elif command == 'help':
+        return {'action': 'help'}
+    
+    elif command == 'arm':
+        return {'action': 'arm'}
+    
+    elif command == 'disarm':
+        return {'action': 'disarm'}
+    
+    elif command == 'status':
+        return {'action': 'status'}
+    
+    elif command == 'land':
+        return {'action': 'land'}
+    
+    elif command == 'takeoff':
+        if len(args) != 1:
+            print("✗ Usage: takeoff <altitude>")
+            return None
+        try:
+            altitude = float(args[0])
+            return {'action': 'takeoff', 'altitude': altitude}
+        except ValueError:
+            print("✗ Altitude must be a number")
+            return None
+    
+    elif command == 'move':
+        if len(args) < 1:
+            print("✗ Usage: move <distance> [speed]")
+            return None
+        try:
+            distance = float(args[0])
+            speed = float(args[1]) if len(args) > 1 else 2.0
+            return {'action': 'move_forward', 'distance': distance, 'speed': speed}
+        except ValueError:
+            print("✗ Distance and speed must be numbers")
+            return None
+    
+    elif command == 'goto':
+        if len(args) != 3:
+            print("✗ Usage: goto <x> <y> <z>")
+            return None
+        try:
+            x = float(args[0])
+            y = float(args[1])
+            z = float(args[2])
+            return {'action': 'goto', 'x': x, 'y': y, 'z': z}
+        except ValueError:
+            print("✗ Coordinates must be numbers")
+            return None
+    
+    else:
+        print(f"✗ Unknown command: {command}")
+        return None
 
 def main():
-    parser = argparse.ArgumentParser(description='Send commands to PX4 drone')
-    parser.add_argument('--host', default='localhost', help='Drone controller host (default: localhost)')
-    parser.add_argument('--port', type=int, default=9999, help='Drone controller port (default: 9999)')
+    """Main interactive loop"""
+    print("🚁 Interactive Drone CLI")
+    print("Type 'help' for available commands or 'exit' to quit")
     
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    sender = DroneCommandSender()
     
-    # Takeoff command
-    takeoff_parser = subparsers.add_parser('takeoff', help='Takeoff to specified altitude')
-    takeoff_parser.add_argument('altitude', type=float, help='Takeoff altitude in meters')
-    
-    # Land command
-    land_parser = subparsers.add_parser('land', help='Land the drone')
-    
-    # Move forward command
-    move_parser = subparsers.add_parser('move', help='Move drone forward')
-    move_parser.add_argument('distance', type=float, help='Distance to move forward in meters')
-    move_parser.add_argument('--speed', type=float, default=2.0, help='Movement speed in m/s (default: 2.0)')
-    
-    # Status command
-    status_parser = subparsers.add_parser('status', help='Get drone status')
-    
-    # Arm command
-    arm_parser = subparsers.add_parser('arm', help='Arm the drone')
-    
-    # Disarm command
-    disarm_parser = subparsers.add_parser('disarm', help='Disarm the drone')
-    
-    args = parser.parse_args()
-    
-    if not args.command:
-        parser.print_help()
-        return
-    
-    # Create command sender
-    sender = DroneCommandSender(args.host, args.port)
+    # Try initial connection
+    print("\nAttempting to connect to drone controller...")
+    sender.connect()
     
     try:
-        # Prepare command data based on user input
-        if args.command == 'takeoff':
-            command_data = {
-                'action': 'takeoff',
-                'altitude': args.altitude
-            }
-            print(f"Sending takeoff command (altitude: {args.altitude}m)...")
+        while True:
+            try:
+                # Get user input
+                user_input = input("\ndrone> ").strip()
+                
+                if not user_input:
+                    continue
+                
+                # Parse command
+                command_data = parse_command(user_input)
+                
+                if not command_data:
+                    continue
+                
+                # Handle special commands
+                if command_data['action'] == 'exit':
+                    print("Goodbye! 👋")
+                    break
+                
+                elif command_data['action'] == 'help':
+                    print_help()
+                    continue
+                
+                # Send command to drone controller
+                print(f"Sending command: {command_data['action']}...")
+                success = sender.send_command(command_data)
+                
+                if not success and not sender.connected:
+                    print("Connection lost. Attempting to reconnect...")
+                    sender.connect()
             
-        elif args.command == 'land':
-            command_data = {
-                'action': 'land'
-            }
-            print("Sending land command...")
-            
-        elif args.command == 'move':
-            command_data = {
-                'action': 'move_forward',
-                'distance': args.distance,
-                'speed': args.speed
-            }
-            print(f"Sending move forward command (distance: {args.distance}m, speed: {args.speed}m/s)...")
-            
-        elif args.command == 'status':
-            command_data = {
-                'action': 'status'
-            }
-            print("Requesting drone status...")
-            
-        elif args.command == 'arm':
-            command_data = {
-                'action': 'arm'
-            }
-            print("Sending arm command...")
-            
-        elif args.command == 'disarm':
-            command_data = {
-                'action': 'disarm'
-            }
-            print("Sending disarm command...")
-        
-        # Send the command
-        success = sender.send_command(command_data)
-        
-        if not success:
-            sys.exit(1)
-            
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user")
+            except EOFError:
+                print("\nGoodbye! 👋")
+                break
+            except KeyboardInterrupt:
+                print("\nGoodbye! 👋")
+                break
+                
     except Exception as e:
         print(f"Error: {e}")
-        sys.exit(1)
     finally:
         sender.close()
 
