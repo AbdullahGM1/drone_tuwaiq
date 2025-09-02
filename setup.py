@@ -11,16 +11,19 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/drone_tuwaiq.launch.py']),
+        ('lib/' + package_name, ['drone_tuwaiq/drone_controller.py', 'drone_tuwaiq/command_interface.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='user',
-    maintainer_email='user@todo.todo',
+    maintainer='AbdullahGM1',
+    maintainer_email='agm.musalami@gmail.com',
     description='Drone control package for Tuwaiq Academy',
-    license='TODO',
-    tests_require=['pytest'],
+    license='MIT',
+    test_suite='pytest',
     entry_points={
         'console_scripts': [
+            'drone_controller = drone_tuwaiq.drone_controller:main',
+            'drone_command = drone_tuwaiq.command_interface:main',
         ],
     },
 )

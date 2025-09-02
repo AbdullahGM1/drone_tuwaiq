@@ -4,10 +4,10 @@
   <name>drone_tuwaiq</name>
   <version>0.0.0</version>
   <description>Drone control package for Tuwaiq Academy</description>
-  <maintainer email="user@todo.todo">user</maintainer>
-  <license>TODO</license>
+  <maintainer email="agm.musalami@gmail.com">AbdullahGM1</maintainer>
+  <license>MIT</license>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
