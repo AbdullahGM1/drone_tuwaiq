@@ -43,6 +43,7 @@ class DroneController(Node):
         self.movement_active = False
         self.movement_lock = threading.Lock()
         self.offboard_enabled = False
+        self.offboard_setpoint_counter = 0
         self.command_id = 0
         
         # Movement parameters
@@ -118,7 +119,16 @@ class DroneController(Node):
     def arm_drone(self):
         self.get_logger().info('🔓 Arming drone...')
         
-        # Send arm command
+        # Start publishing offboard control mode and setpoints before arming
+        self.offboard_enabled = True
+        self.offboard_setpoint_counter = 0
+        
+        # Wait for a few setpoint publications before arming
+        self.create_timer(2.0, self._delayed_arm)
+        self.drone_state = "PREPARING_ARM"
+        
+    def _delayed_arm(self):
+        # Send arm command after publishing setpoints for 2 seconds
         msg = VehicleCommand()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         msg.command = VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM
@@ -166,8 +176,18 @@ class DroneController(Node):
     def takeoff(self, altitude=2.0):
         self.get_logger().info(f'🚁 Taking off to {altitude}m...')
         
+        # Check if drone is armed
+        if self.vehicle_status.arming_state != VehicleStatus.ARMING_STATE_ARMED:
+            self.get_logger().warn('Drone must be armed before takeoff. Please arm first.')
+            return
+        
         # Enable offboard mode first
         self.enable_offboard_mode()
+        
+        # Set takeoff setpoint (hover at altitude)
+        self.current_setpoint.position = [0.0, 0.0, -altitude]  # NED frame: negative Z for up
+        self.current_setpoint.velocity = [0.0, 0.0, 0.0]
+        self.current_setpoint.yaw = float('nan')  # Keep current yaw
         
         # Send takeoff command
         msg = VehicleCommand()
@@ -215,17 +235,14 @@ class DroneController(Node):
         self.drone_state = "LANDING"
     
     def enable_offboard_mode(self):
-        # Set offboard control mode
-        offboard_msg = OffboardControlMode()
-        offboard_msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
-        offboard_msg.position = True
-        offboard_msg.velocity = True
-        offboard_msg.acceleration = False
-        offboard_msg.attitude = False
-        offboard_msg.body_rate = False
-        
-        self.offboard_control_mode_pub.publish(offboard_msg)
-        
+        # Just enable the publishing of offboard control mode and setpoints
+        # The actual mode switch will happen after enough setpoints are published
+        if not self.offboard_enabled:
+            self.offboard_enabled = True
+            self.offboard_setpoint_counter = 0
+            self.get_logger().info('Started publishing offboard setpoints')
+    
+    def switch_to_offboard_mode(self):
         # Send mode change command to OFFBOARD
         msg = VehicleCommand()
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
@@ -244,7 +261,7 @@ class DroneController(Node):
         msg.from_external = True
         
         self.vehicle_command_pub.publish(msg)
-        self.offboard_enabled = True
+        self.get_logger().info('✅ Offboard mode switch command sent')
         
     def move_with_distance(self, direction, distance):
         with self.movement_lock:
@@ -350,6 +367,13 @@ class DroneController(Node):
             # Publish trajectory setpoint
             self.current_setpoint.timestamp = int(self.get_clock().now().nanoseconds / 1000)
             self.trajectory_setpoint_pub.publish(self.current_setpoint)
+            
+            # Count setpoint publications for offboard mode activation
+            self.offboard_setpoint_counter += 1
+            
+            # Switch to offboard mode after publishing enough setpoints
+            if self.offboard_setpoint_counter == 10 and self.vehicle_status.nav_state != VehicleStatus.NAVIGATION_STATE_OFFBOARD:
+                self.switch_to_offboard_mode()
     
     def publish_status(self):
         armed_state = "Armed" if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED else "Disarmed"
@@ -367,7 +391,12 @@ class DroneController(Node):
         }
         nav_state = nav_state_names.get(self.vehicle_status.nav_state, f"Unknown({self.vehicle_status.nav_state})")
         
-        self.get_logger().info(f'Status: {self.drone_state} | {armed_state} | Nav: {nav_state} | Offboard: {self.offboard_enabled}')
+        # Add setpoint counter info when preparing for offboard
+        extra_info = ""
+        if self.offboard_enabled and self.offboard_setpoint_counter < 10:
+            extra_info = f" | Setpoints: {self.offboard_setpoint_counter}/10"
+        
+        self.get_logger().info(f'Status: {self.drone_state} | {armed_state} | Nav: {nav_state} | Offboard: {self.offboard_enabled}{extra_info}')
 
 def main(args=None):
     rclpy.init(args=args)
