@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/drone_tuwaiq.launch.py']),
-        ('lib/' + package_name, ['drone_tuwaiq/drone_controller.py', 'drone_tuwaiq/command_interface.py']),
+        ('lib/' + package_name, ['drone_tuwaiq/drone_controller.py', 'drone_tuwaiq/command_interface.py', 'drone_tuwaiq/gimbal_yolo_node.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             'drone_controller = drone_tuwaiq.drone_controller:main',
             'drone_command = drone_tuwaiq.command_interface:main',
+            'gimbal_yolo_node = drone_tuwaiq.gimbal_yolo_node:main',
         ],
     },
 )
