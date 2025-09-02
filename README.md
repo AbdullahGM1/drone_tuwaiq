@@ -1351,7 +1351,7 @@ SOFTWARE.
 
 *Built with ❤️ for the robotics and drone community*
 
-[![GitHub stars](https://img.shields.io/github/stars/yourusername/drone_tuwaiq?style=social)](https://github.com/yourusername/drone_tuwaiq)
-[![GitHub forks](https://img.shields.io/github/forks/yourusername/drone_tuwaiq?style=social)](https://github.com/yourusername/drone_tuwaiq)
+[![GitHub stars](https://img.shields.io/github/stars/AbdullahGM1/drone_tuwaiq?style=social)](https://github.com/AbdullahGM1/drone_tuwaiq)
+[![GitHub forks](https://img.shields.io/github/forks/AbdullahGM1/drone_tuwaiq?style=social)](https://github.com/AbdullahGM1/drone_tuwaiq)
 
 </div>
