@@ -80,13 +80,15 @@ def generate_launch_description():
                                    'launch', 'yolo.launch.py')
                     ]),
                     launch_arguments={
-                        'input_image_topic': 'yolo/image_raw',
+                        'input_image_topic': '/drone/gimbal_camera',
                         'model': 'yolov8n.pt',  # Using nano model for better performance
-                        'device': 'cpu',  # Change to 'cuda:0' if you have GPU
-                        'threshold': '0.5',
+                        'device': 'cuda:0',  # Using GPU acceleration
+                        'threshold': '0.3',  # Lower threshold to detect more objects
                         'use_tracking': 'False',
                         'use_3d': 'False',
-                        'use_debug': 'False'
+                        'use_debug': 'True',  # Enable debug to see detection images
+                        'namespace': 'yolo',  # Ensure correct namespace
+                        'enable': 'True'  # Explicitly enable YOLO
                     }.items()
                 )
             ]
