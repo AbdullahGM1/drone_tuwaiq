@@ -11,7 +11,7 @@ def generate_launch_description():
     
     return LaunchDescription([
         ExecuteProcess(
-            cmd=['bash', '-c', 'cd /home/user/shared_volume/PX4-Autopilot && make px4_sitl gz_x500_lidar_camera'],
+            cmd=['bash', '-c', 'cd /home/user/shared_volume/PX4-Autopilot && make px4_sitl gz_x500_lidar_camera_baylands'],
             name='px4_sitl',
             output='screen'
         ),
