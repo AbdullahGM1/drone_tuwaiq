@@ -1,6 +1,9 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import ExecuteProcess, TimerAction
+from launch.actions import ExecuteProcess, TimerAction, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from ament_index_python.packages import get_package_share_directory
+import os
 
 
 def generate_launch_description():
@@ -64,6 +67,41 @@ def generate_launch_description():
                         ('/navsat', ns + '/gps'),
                     ]
                 ),
+            ]
+        ),
+        
+        # Start YOLO detection with delay
+        TimerAction(
+            period=6.0,
+            actions=[
+                IncludeLaunchDescription(
+                    PythonLaunchDescriptionSource([
+                        os.path.join(get_package_share_directory('yolo_bringup'), 
+                                   'launch', 'yolo.launch.py')
+                    ]),
+                    launch_arguments={
+                        'input_image_topic': 'yolo/image_raw',
+                        'model': 'yolov8n.pt',  # Using nano model for better performance
+                        'device': 'cpu',  # Change to 'cuda:0' if you have GPU
+                        'threshold': '0.5',
+                        'use_tracking': 'False',
+                        'use_3d': 'False',
+                        'use_debug': 'False'
+                    }.items()
+                )
+            ]
+        ),
+        
+        # Start gimbal YOLO node with delay
+        TimerAction(
+            period=7.0,
+            actions=[
+                Node(
+                    package='drone_tuwaiq',
+                    executable='gimbal_yolo_node.py',
+                    name='gimbal_yolo_node',
+                    output='screen'
+                )
             ]
         ),
         

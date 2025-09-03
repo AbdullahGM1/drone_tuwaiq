@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
-from yolo_msgs.msg import DetectionArray
+from vision_msgs.msg import Detection2DArray
 import cv2
 from cv_bridge import CvBridge
 
@@ -46,7 +46,7 @@ class GimbalYoloNode(Node):
         
         # Subscriber to YOLO detections
         self.detection_subscription = self.create_subscription(
-            DetectionArray,
+            Detection2DArray,
             'yolo/detections',
             self.detection_callback,
             10
@@ -54,15 +54,15 @@ class GimbalYoloNode(Node):
         
         # Publisher for processed detections (with drone-specific processing)
         self.processed_detections_publisher = self.create_publisher(
-            DetectionArray,
-            'drone/gimbal_detections',
+            Detection2DArray,
+            '/drone/gimbal_detections_yolo',
             10
         )
         
         self.get_logger().info('Gimbal YOLO Node initialized')
         self.get_logger().info('Subscribing to: /drone/gimbal_camera')
         self.get_logger().info('Publishing images to: yolo/image_raw')
-        self.get_logger().info('Publishing detections to: drone/gimbal_detections')
+        self.get_logger().info('Publishing detections to: /drone/gimbal_detections_yolo')
     
     def image_callback(self, msg: Image):
         """
@@ -81,7 +81,7 @@ class GimbalYoloNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error processing gimbal image: {str(e)}')
     
-    def detection_callback(self, msg: DetectionArray):
+    def detection_callback(self, msg: Detection2DArray):
         """
         Callback for YOLO detections.
         Process and republish detections with drone-specific information.
@@ -95,8 +95,8 @@ class GimbalYoloNode(Node):
                 # Log each detection
                 for i, detection in enumerate(msg.detections):
                     self.get_logger().info(
-                        f'Detection {i+1}: {detection.class_name} '
-                        f'(confidence: {detection.score:.2f})'
+                        f'Detection {i+1}: {detection.results[0].hypothesis.class_id} '
+                        f'(confidence: {detection.results[0].hypothesis.score:.2f})'
                     )
             
             # Add custom drone-specific processing here if needed
@@ -109,7 +109,7 @@ class GimbalYoloNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error processing detections: {str(e)}')
     
-    def visualize_detections(self, image_msg: Image, detections: DetectionArray):
+    def visualize_detections(self, image_msg: Image, detections: Detection2DArray):
         """
         Optional method to visualize detections on the image.
         Call this method if you want to publish annotated images.
@@ -124,8 +124,8 @@ class GimbalYoloNode(Node):
                     # Extract bounding box coordinates
                     center_x = int(detection.bbox.center.position.x)
                     center_y = int(detection.bbox.center.position.y)
-                    width = int(detection.bbox.size.x)
-                    height = int(detection.bbox.size.y)
+                    width = int(detection.bbox.size_x)
+                    height = int(detection.bbox.size_y)
                     
                     # Calculate corner points
                     x1 = center_x - width // 2
@@ -137,9 +137,12 @@ class GimbalYoloNode(Node):
                     cv2.rectangle(cv_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     
                     # Draw label
-                    label = f'{detection.class_name}: {detection.score:.2f}'
-                    cv2.putText(cv_image, label, (x1, y1 - 10), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    if detection.results and len(detection.results) > 0:
+                        class_id = detection.results[0].hypothesis.class_id
+                        score = detection.results[0].hypothesis.score
+                        label = f'{class_id}: {score:.2f}'
+                        cv2.putText(cv_image, label, (x1, y1 - 10), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             
             # Convert back to ROS image and return
             annotated_msg = self.cv_bridge.cv2_to_imgmsg(cv_image, 'bgr8')
